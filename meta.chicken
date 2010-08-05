@@ -65,6 +65,7 @@
         ((type? exp 'quote) (cadr exp))
         ((type? exp 'define) (eval-definition exp env))
         ((type? exp 'if) (eval-if exp env))
+        ((type? exp 'lambda) (list 'procedure (cadr exp) (cddr exp) env))
     ))
 
 (define (apply exp env) 
