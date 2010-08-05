@@ -41,8 +41,12 @@
 ;; Booleans and Predicates
 ;;__________________________________________________________________________;;
 
-(define True #t)
-(define False #f)
+(define Void 'Void)
+
+(define True 'True)
+(define False 'False)
+(define (true? exp) (not (eq? exp False)))
+(define (false? exp) (eq? exp False))
 
 (define (self-evaluating? expression)
   (or (number? expression) (string? expression)))
@@ -54,13 +58,13 @@
 ;; Eval and Apply
 ;;__________________________________________________________________________;;
 
-;(define (text-of-quote q) (object-data q))
 
 (define (meta-eval exp env)
   (cond ((self-evaluating? exp) exp)
         ((variable? exp) (lookup-variable-value exp env))
-    ;        ((type? exp 'quote) (text-of-quote exp))
+        ((type? exp 'quote) (cadr exp))
         ((type? exp 'define) (eval-definition exp env))
+        ((type? exp 'if) (eval-if exp env))
     ))
 
 (define (apply exp env) 
@@ -72,7 +76,14 @@
 	(val (if (symbol? (cadr exp)) (caddr exp) "make-lambda not implemented")))
   (set-variable! var
                  (meta-eval val env)
-                  env)))
+                  env))
+  Void)
+
+(define (eval-if exp env)
+  (if (true? (meta-eval (cadr exp) env))
+      (meta-eval (caddr exp) env)
+      (meta-eval (cadddr exp) env)))
+
 
 
 ;;__________________________________________________________________________;;
@@ -116,16 +127,14 @@
 ;; Setup the Global Environment
 ;;__________________________________________________________________________;;
 
-(define primitives (list
-		     '('True . True)
-		     '('False . False)
-		     '('the-empty-list . '())))
+(define primitives '())
 
 (define (setup-environment)
   (let ((initial-env (extend-environment primitives the-empty-environment)))
     (set-variable! 'True True initial-env)
     (set-variable! 'False False initial-env)
     (set-variable! 'the-empty-list '() initial-env)
+    (set-variable! 'Void Void initial-env)
     initial-env))
 
 (define the-global-environment (setup-environment))
@@ -139,23 +148,14 @@
   (display ": ")
   (let ((input (read)))
     (let ((output (meta-eval input the-global-environment)))
-      (display "= ")
-      (user-print output)))
+      (if (eq? output Void) (REPL)
+	                    (user-print output))))
   (REPL))
-
-(define (prompt-for-input string)
-  (display string))
-
-(define (announce-output string)
-  (display string))
 
 (define (user-print object)
   (print object))
 
 
-
-
-; (load "/home/trades/Documents/meta.chicken")
 ;; Comment out (REPL) for debugging or using as a library
 (REPL)
 
