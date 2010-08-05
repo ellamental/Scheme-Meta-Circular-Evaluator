@@ -1,0 +1,161 @@
+;;#!/usr/local/bin/csi
+;;__________________________________________________________________________;;
+;; meta
+;; meta.chicken | 2010-08-04
+;; (load "~/Documents/meta/meta.chicken")
+;; 
+;; An interpreter for a Scheme-like language based mostly off the 
+;; meta-circular evaluator found in SICP
+;; 
+;; Recent Changes:
+;;
+;;
+;; TODO:
+;; 
+;;__________________________________________________________________________;;
+
+
+;;__________________________________________________________________________;;
+;; Type System
+;; 
+;; Each object is a cons cell with the (car = type) (cdr = data).
+;; This is subject to change considerably.  Use the type operators 
+;; type, type?, object-data and make-type exclusivley to interact with types.
+;;__________________________________________________________________________;;
+
+
+
+(define (make-type type expression)
+  (cons type expression))
+
+(define (type object)
+  (car object))
+
+(define (type? object quoted-type)
+  (equal? (type object) quoted-type))
+
+(define (object-data object)
+  (cdr object))
+
+;;__________________________________________________________________________;;
+;; Booleans and Predicates
+;;__________________________________________________________________________;;
+
+(define True #t)
+(define False #f)
+
+(define (self-evaluating? expression)
+  (or (number? expression) (string? expression)))
+
+(define (variable? expression)
+  (symbol? expression))
+
+;;__________________________________________________________________________;;
+;; Eval and Apply
+;;__________________________________________________________________________;;
+
+;(define (text-of-quote q) (object-data q))
+
+(define (meta-eval exp env)
+  (cond ((self-evaluating? exp) exp)
+        ((variable? exp) (lookup-variable-value exp env))
+    ;        ((type? exp 'quote) (text-of-quote exp))
+        ((type? exp 'define) (eval-definition exp env))
+    ))
+
+(define (apply exp env) 
+  (void))
+
+
+(define (eval-definition exp env)
+  (let ((var (if (symbol? (cadr exp)) (cadr exp) (caadr exp)))
+	(val (if (symbol? (cadr exp)) (caddr exp) "make-lambda not implemented")))
+  (set-variable! var
+                 (meta-eval val env)
+                  env)))
+
+
+;;__________________________________________________________________________;;
+;; Environments and Frames
+;; 
+;; Environments consist of two parts, a frame and an enclosing environment.
+;; All bindings to variables are stored within the frame
+;;__________________________________________________________________________;;
+
+(define the-empty-environment '())
+(define (current-environment env) (car env))
+(define (enclosing-environment env) (cdr env))
+
+(define (make-frame bindings)
+  (alist->hash-table bindings))
+
+(define (add-binding-to-frame! var value frame)
+  (hash-table-set! frame var value))
+
+(define (extend-environment bindings base-environment)
+  (cons (make-frame bindings) base-environment))
+
+
+;; Lookup and Set Procedures
+;;_______________________________________________________;;
+
+(define (lookup-variable-value variable environment)
+  (if (eq? environment the-empty-environment)
+    (print "Unbound variable:  " variable)
+    (if (hash-table-exists? (current-environment environment) variable)
+        (hash-table-ref (current-environment environment) variable)
+        (lookup-variable-value variable (enclosing-environment environment)))))
+  
+(define (set-variable! variable value environment)
+  (add-binding-to-frame! variable value (current-environment environment)))
+
+
+
+
+;;__________________________________________________________________________;;
+;; Setup the Global Environment
+;;__________________________________________________________________________;;
+
+(define primitives (list
+		     '('True . True)
+		     '('False . False)
+		     '('the-empty-list . '())))
+
+(define (setup-environment)
+  (let ((initial-env (extend-environment primitives the-empty-environment)))
+    (set-variable! 'True True initial-env)
+    (set-variable! 'False False initial-env)
+    (set-variable! 'the-empty-list '() initial-env)
+    initial-env))
+
+(define the-global-environment (setup-environment))
+
+;;__________________________________________________________________________;;
+;; REPL
+;;__________________________________________________________________________;;
+
+
+(define (REPL)
+  (display ": ")
+  (let ((input (read)))
+    (let ((output (meta-eval input the-global-environment)))
+      (display "= ")
+      (user-print output)))
+  (REPL))
+
+(define (prompt-for-input string)
+  (display string))
+
+(define (announce-output string)
+  (display string))
+
+(define (user-print object)
+  (print object))
+
+
+
+
+; (load "/home/trades/Documents/meta.chicken")
+;; Comment out (REPL) for debugging or using as a library
+(REPL)
+
