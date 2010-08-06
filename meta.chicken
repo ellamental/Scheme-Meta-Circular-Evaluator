@@ -16,6 +16,9 @@
 
 (define (Error #!rest args) False)
 
+(define (test test delim result)
+  (equal? test result))
+
 ;;__________________________________________________________________________;;
 ;; Type System
 ;; 
@@ -30,10 +33,13 @@
   (cons type expression))
 
 (define (type object)
-  (car object))
+  (cond ((symbol? object) 'symbol)
+        ((number? object) 'number)
+        ((string? object) 'string)
+        (else (car object))))
 
-(define (type? object quoted-type)
-  (equal? (type object) quoted-type))
+(define (type? object . types)
+  (member (type object) types))
 
 (define (object-data object)
   (cdr object))
@@ -44,17 +50,12 @@
 
 (define Void 'Void)
 (define &args '&args)
+(define >>> '>>>)
 
 (define True 'True)
 (define False 'False)
 (define (true? exp) (not (eq? exp False)))
 (define (false? exp) (eq? exp False))
-
-(define (self-evaluating? expression)
-  (or (number? expression) (string? expression)))
-
-(define (variable? expression)
-  (symbol? expression))
 
 (define (application? expression)
   (pair? expression))
@@ -65,17 +66,20 @@
 ;;__________________________________________________________________________;;
 
 
+
+
 (define (meta-eval exp env)
-  (cond ((self-evaluating? exp) exp)
-        ((variable? exp)     (lookup-variable-value exp env))
-        ((type? exp 'quote)  (cadr exp))
-        ((type? exp 'define) (eval-definition exp env))
-        ((type? exp 'if)     (eval-if exp env))
-        ((type? exp 'lambda) (eval-lambda exp env))
-        ((type? exp 'begin)  (eval-sequence (cdr exp) env))
-        ((application? exp)  (meta-apply (meta-eval (car exp) env)
-                                         (eval-arguments (cdr exp) env)))
-    ))
+  (cond ((type? exp 'number 'string) exp)
+        ((type? exp 'symbol) (lookup-variable-value exp env))
+        (else
+          (let ((name (car exp)))
+          (cond ((hash-table-exists? global-syntax-definitions name)
+                  ((hash-table-ref global-syntax-definitions name) exp env)) 
+                (else (meta-apply (meta-eval (car exp) env)
+                                  (eval-arguments (cdr exp) env))))))))
+
+
+
 
 (define (eval-arguments exps env)
   (if (null? exps)
@@ -143,10 +147,10 @@
                     result-list))))                             ;; and cons it onto result-list
   (define args (cadr procedure))
   
-  (cond ((= (length args) 0)                                    ;; Check for no argument procedures
-           (if (= (length val-list) 0)
+  (cond ((null? args)                                           ;; Check for no argument procedures
+           (if (null? val-list)
                '()
-               (Error (print "Too many values")))
+               (Error (print "Too many values"))))
         ((>= (length val-list) (length args))                   ;; Check for enough values
            (loop args val-list '()))
         (else
@@ -180,7 +184,7 @@
 
 (define (lookup-variable-value variable environment)
   (if (eq? environment the-empty-environment)
-    (begin (print "Unbound variable:  " variable) Void)
+    (Error (print "Unbound variable:  " variable))
     (if (hash-table-exists? (current-environment environment) variable)
         (hash-table-ref (current-environment environment) variable)
         (lookup-variable-value variable (enclosing-environment environment)))))
@@ -195,23 +199,47 @@
 ;; Setup the Global Environment
 ;;__________________________________________________________________________;;
 
+(define global-syntax-definitions (make-hash-table))
+(define (add-syntax name procedure) 
+  (hash-table-set! global-syntax-definitions name procedure))
+
+(add-syntax 'symbol lookup-variable-value)
+(add-syntax 'quote (lambda (exp env) (cadr exp)))
+(add-syntax 'define eval-definition)
+(add-syntax 'if eval-if)
+(add-syntax 'lambda eval-lambda)
+(add-syntax 'begin (lambda (exp env) (eval-sequence (cdr exp) env)))
+
+
 (define primitives '())
 
 (define (setup-environment)
   (let ((initial-env (extend-environment primitives the-empty-environment)))
+    ;; Self-Evaluating Values
     (set-variable! 'True True initial-env)
     (set-variable! 'False False initial-env)
     (set-variable! 'the-empty-list '() initial-env)
     (set-variable! 'Void Void initial-env)
     (set-variable! '&args &args initial-env)
+    (set-variable! '>>> >>> initial-env)
+    ;; Primitive Procedures
     (set-variable! 'null? (cons 'primitive null?) initial-env)
     (set-variable! 'equal? (cons 'primitive equal?) initial-env)
     (set-variable! 'print (cons 'primitive print) initial-env)
+    ;; Primitive List Procedures
     (set-variable! 'cons (cons 'primitive cons) initial-env)
     (set-variable! 'car (cons 'primitive car) initial-env)
     (set-variable! 'cdr (cons 'primitive cdr) initial-env)
+    ;; Primitive Number Procedures
+    (set-variable! '+ (cons 'primitive +) initial-env)
+    (set-variable! '- (cons 'primitive -) initial-env)
+    (set-variable! '/ (cons 'primitive /) initial-env)
+    (set-variable! '* (cons 'primitive *) initial-env)
+    ;; Access to the type system
     (set-variable! 'type (cons 'primitive type) initial-env)
     (set-variable! 'type? (cons 'primitive type?) initial-env)
+    ;; Access to the unit-test framework
+    (set-variable! 'test (cons 'primitive test) initial-env)
     initial-env))
 
 (define the-global-environment (setup-environment))
@@ -237,15 +265,3 @@
 (REPL)
 
 
-(define (a x)
-  (define (b y) y)
-  (b x))
-; (define ...) should return Void
-; (a 3) >>> 3
-; b >>> Error 'unbound-variable
-; 
-
-
-(define (b x)
-  (define (c) x)
-  (c))
