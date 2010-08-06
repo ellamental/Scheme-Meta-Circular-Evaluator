@@ -14,6 +14,7 @@
 ;; 
 ;;__________________________________________________________________________;;
 
+(define (Error #!rest args) False)
 
 ;;__________________________________________________________________________;;
 ;; Type System
@@ -42,6 +43,7 @@
 ;;__________________________________________________________________________;;
 
 (define Void 'Void)
+(define &args '&args)
 
 (define True 'True)
 (define False 'False)
@@ -54,6 +56,10 @@
 (define (variable? expression)
   (symbol? expression))
 
+(define (application? expression)
+  (pair? expression))
+
+
 ;;__________________________________________________________________________;;
 ;; Eval and Apply
 ;;__________________________________________________________________________;;
@@ -61,37 +67,85 @@
 
 (define (meta-eval exp env)
   (cond ((self-evaluating? exp) exp)
-        ((variable? exp) (lookup-variable-value exp env))
-        ((type? exp 'quote) (cadr exp))
+        ((variable? exp)     (lookup-variable-value exp env))
+        ((type? exp 'quote)  (cadr exp))
         ((type? exp 'define) (eval-definition exp env))
-        ((type? exp 'if) (eval-if exp env))
-        ((type? exp 'lambda) (list 'procedure (cadr exp) (cddr exp) env))
-        ((type? exp 'begin) (eval-sequence (cdr exp) env))
+        ((type? exp 'if)     (eval-if exp env))
+        ((type? exp 'lambda) (eval-lambda exp env))
+        ((type? exp 'begin)  (eval-sequence (cdr exp) env))
+        ((application? exp)  (meta-apply (meta-eval (car exp) env)
+                                         (eval-arguments (cdr exp) env)))
     ))
+
+(define (eval-arguments exps env)
+  (if (null? exps)
+      '()
+      (cons (meta-eval (car exps) env)
+            (eval-arguments (cdr exps) env))))
 
 (define (eval-sequence expressions env)
   (if (null? (cdr expressions)) (meta-eval (car expressions) env)
                                 (begin
-				  (meta-eval (car expressions) env)
+                                (meta-eval (car expressions) env)
                                   (eval-sequence (cdr expressions) env))))
 
-(define (apply exp env) 
-  (void))
-
-
+(define (eval-lambda exp env)
+  (list 'procedure (cadr exp) (cddr exp) env))
+  
 (define (eval-definition exp env)
-  (let ((var (if (symbol? (cadr exp)) (cadr exp) (caadr exp)))
-	(val (if (symbol? (cadr exp)) (caddr exp) "make-lambda not implemented")))
-  (set-variable! var
-                 (meta-eval val env)
-                  env))
+  (define (eval-lambda-definition)
+    (let ((name (caadr exp))
+          (args (cdadr exp))
+          (body (cddr exp)))
+      (set-variable! name (list 'procedure args body env) env)))
+  
+  (if (symbol? (cadr exp))
+    (set-variable! (cadr exp) (meta-eval (caddr exp) env) env)
+    (eval-lambda-definition))
+
   Void)
 
+;; (if condition if-true if-false)
 (define (eval-if exp env)
   (if (true? (meta-eval (cadr exp) env))
       (meta-eval (caddr exp) env)
       (meta-eval (cadddr exp) env)))
 
+
+
+(define (meta-apply procedure arguments) 
+  (cond ((type? procedure 'primitive)
+          (apply (cdr procedure) arguments))
+        ((type? procedure 'procedure)
+          (let ((arg-vals (assign-values procedure arguments)))
+            (if (false? arg-vals) Void
+                (eval-sequence (caddr procedure)
+                               (extend-environment arg-vals
+                                                   (cadddr procedure))))))
+    ))
+
+;; Allow use of &args for variable arity procedures
+(define (assign-values procedure val-list)
+  (define (loop arg-list val-list result-list)
+    (if (null? (cdr arg-list))                                  ;; Check for the end of argument list
+        (if (null? (cdr val-list))                              ;; Check if value list is null too
+            (reverse (cons (cons (car arg-list)
+                                 (car val-list))
+                           result-list))                        ;; If it is return result-list
+            (if (eq? (car arg-list) &args)                      ;; Check if last argument was &args
+                (reverse (cons (cons (car arg-list) val-list)
+                               result-list))                    ;; If it was return result-list
+                (Error (print "Too many values"))))
+        (loop (cdr arg-list)
+              (cdr val-list)                                    ;; If not at end of args
+              (cons (cons (car arg-list)                        ;; Create a pair of (arg . value)
+                          (car val-list))
+                    result-list))))                             ;; and cons it onto result-list
+  (define args (cadr procedure))
+  
+  (if (>= (length val-list) (length args))                      ;; Check for enough values
+      (loop args val-list '())
+    (Error (print "Too few values"))))
 
 
 
@@ -121,7 +175,7 @@
 
 (define (lookup-variable-value variable environment)
   (if (eq? environment the-empty-environment)
-    (print "Unbound variable:  " variable)
+    (begin (print "Unbound variable:  " variable) Void)
     (if (hash-table-exists? (current-environment environment) variable)
         (hash-table-ref (current-environment environment) variable)
         (lookup-variable-value variable (enclosing-environment environment)))))
@@ -144,6 +198,15 @@
     (set-variable! 'False False initial-env)
     (set-variable! 'the-empty-list '() initial-env)
     (set-variable! 'Void Void initial-env)
+    (set-variable! '&args &args initial-env)
+    (set-variable! 'null? (cons 'primitive null?) initial-env)
+    (set-variable! 'equal? (cons 'primitive equal?) initial-env)
+    (set-variable! 'print (cons 'primitive print) initial-env)
+    (set-variable! 'cons (cons 'primitive cons) initial-env)
+    (set-variable! 'car (cons 'primitive car) initial-env)
+    (set-variable! 'cdr (cons 'primitive cdr) initial-env)
+    (set-variable! 'type (cons 'primitive type) initial-env)
+    (set-variable! 'type? (cons 'primitive type?) initial-env)
     initial-env))
 
 (define the-global-environment (setup-environment))
@@ -158,7 +221,7 @@
   (let ((input (read)))
     (let ((output (meta-eval input the-global-environment)))
       (if (eq? output Void) (REPL)
-	                    (user-print output))))
+                            (user-print output))))
   (REPL))
 
 (define (user-print object)
@@ -166,5 +229,5 @@
 
 
 ;; Comment out (REPL) for debugging or using as a library
-;(REPL)
+(REPL)
 
