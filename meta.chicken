@@ -16,9 +16,6 @@
 
 (define (Error #!rest args) False)
 
-(define (test test delim result)
-  (equal? test result))
-
 ;;__________________________________________________________________________;;
 ;; Type System
 ;; 
@@ -26,7 +23,6 @@
 ;; This is subject to change considerably.  Use the type operators 
 ;; type, type?, object-data and make-type exclusivley to interact with types.
 ;;__________________________________________________________________________;;
-
 
 
 (define (make-type type expression)
@@ -57,20 +53,51 @@
 (define (true? exp) (not (eq? exp False)))
 (define (false? exp) (eq? exp False))
 
-(define (application? expression)
-  (pair? expression))
+
+;;__________________________________________________________________________;;
+;; Environments and Frames
+;; 
+;; Environments consist of two parts, a frame and an enclosing environment.
+;; All bindings to variables are stored within the frame
+;;__________________________________________________________________________;;
+
+(define the-empty-environment '())
+(define (current-environment env) (car env))
+(define (enclosing-environment env) (cdr env))
+
+(define (make-frame bindings)
+  (alist->hash-table bindings))
+
+(define (add-binding-to-frame! var value frame)
+  (hash-table-set! frame var value))
+
+(define (extend-environment bindings base-environment)
+  (cons (make-frame bindings) base-environment))
+
+
+;; Lookup and Set Procedures
+;;_______________________________________________________;;
+
+(define (lookup-variable-value variable environment)
+  (if (eq? environment the-empty-environment)
+    (Error (print "Unbound variable:  " variable))
+    (if (hash-table-exists? (current-environment environment) variable)
+        (hash-table-ref (current-environment environment) variable)
+        (lookup-variable-value variable (enclosing-environment environment)))))
+  
+(define (set-variable! variable value environment)
+  (add-binding-to-frame! variable value (current-environment environment)))
 
 
 ;;__________________________________________________________________________;;
 ;; Eval and Apply
 ;;__________________________________________________________________________;;
 
-
-
-
+;; meta-eval evaluates an expression in an environment
+;; meta-eval uses global-syntax-definitions
 (define (meta-eval exp env)
   (cond ((type? exp 'number 'string) exp)
-        ((type? exp 'symbol) (lookup-variable-value exp env))
+        ((type? exp 'symbol) (lookup-variable-value exp env))               
         (else
           (let ((name (car exp)))
           (cond ((hash-table-exists? global-syntax-definitions name)
@@ -78,44 +105,21 @@
                 (else (meta-apply (meta-eval (car exp) env)
                                   (eval-arguments (cdr exp) env))))))))
 
-
-
-
+;; eval-arguments evaluates each expression in exps and returns a list of 
+;; the values.  It is used to supply a list of values to meta-apply.
 (define (eval-arguments exps env)
   (if (null? exps)
       '()
       (cons (meta-eval (car exps) env)
             (eval-arguments (cdr exps) env))))
 
+;; eval-sequence evaluates all expressions in order and returns the value
+;; of the last expression evaluated.  It is used by meta-eval and begin.
 (define (eval-sequence expressions env)
   (if (null? (cdr expressions)) (meta-eval (car expressions) env)
                                 (begin
                                 (meta-eval (car expressions) env)
                                   (eval-sequence (cdr expressions) env))))
-
-(define (eval-lambda exp env)
-  (list 'procedure (cadr exp) (cddr exp) env))
-  
-(define (eval-definition exp env)
-  (define (eval-lambda-definition)
-    (let ((name (caadr exp))
-          (args (cdadr exp))
-          (body (cddr exp)))
-      (set-variable! name (list 'procedure args body env) env)))
-  
-  (if (symbol? (cadr exp))
-    (set-variable! (cadr exp) (meta-eval (caddr exp) env) env)
-    (eval-lambda-definition))
-
-  Void)
-
-;; (if condition if-true if-false)
-(define (eval-if exp env)
-  (if (true? (meta-eval (cadr exp) env))
-      (meta-eval (caddr exp) env)
-      (meta-eval (cadddr exp) env)))
-
-
 
 (define (meta-apply procedure arguments) 
   (cond ((type? procedure 'primitive)
@@ -159,90 +163,109 @@
 
 
 ;;__________________________________________________________________________;;
-;; Environments and Frames
-;; 
-;; Environments consist of two parts, a frame and an enclosing environment.
-;; All bindings to variables are stored within the frame
+;; Primitive Syntax Definitions
 ;;__________________________________________________________________________;;
 
-(define the-empty-environment '())
-(define (current-environment env) (car env))
-(define (enclosing-environment env) (cdr env))
-
-(define (make-frame bindings)
-  (alist->hash-table bindings))
-
-(define (add-binding-to-frame! var value frame)
-  (hash-table-set! frame var value))
-
-(define (extend-environment bindings base-environment)
-  (cons (make-frame bindings) base-environment))
-
-
-;; Lookup and Set Procedures
-;;_______________________________________________________;;
-
-(define (lookup-variable-value variable environment)
-  (if (eq? environment the-empty-environment)
-    (Error (print "Unbound variable:  " variable))
-    (if (hash-table-exists? (current-environment environment) variable)
-        (hash-table-ref (current-environment environment) variable)
-        (lookup-variable-value variable (enclosing-environment environment)))))
-  
-(define (set-variable! variable value environment)
-  (add-binding-to-frame! variable value (current-environment environment)))
-
-
-
-
-;;__________________________________________________________________________;;
-;; Setup the Global Environment
-;;__________________________________________________________________________;;
 
 (define global-syntax-definitions (make-hash-table))
 (define (add-syntax name procedure) 
   (hash-table-set! global-syntax-definitions name procedure))
 
-(add-syntax 'symbol lookup-variable-value)
+;; quote
 (add-syntax 'quote (lambda (exp env) (cadr exp)))
+
+;; define
+(define (eval-definition exp env)
+  (define (eval-lambda-definition)
+    (let ((name (caadr exp))
+          (args (cdadr exp))
+          (body (cddr exp)))
+      (set-variable! name (list 'procedure args body env) env)))
+  (if (symbol? (cadr exp))
+    (set-variable! (cadr exp) (meta-eval (caddr exp) env) env)
+    (eval-lambda-definition))
+  Void)
 (add-syntax 'define eval-definition)
+
+;; if
+(define (eval-if exp env)
+  (if (true? (meta-eval (cadr exp) env))
+      (meta-eval (caddr exp) env)
+      (meta-eval (cadddr exp) env)))
 (add-syntax 'if eval-if)
+
+;; lambda
+(define (eval-lambda exp env)
+  (list 'procedure (cadr exp) (cddr exp) env))
 (add-syntax 'lambda eval-lambda)
+
+;; begin
 (add-syntax 'begin (lambda (exp env) (eval-sequence (cdr exp) env)))
 
+;; scheme
+;; Allows scheme expressions to be evaluated.  There are no hooks into/out of scheme.
+(add-syntax 'scheme (lambda (exp env) (eval (cadr exp))))
 
-(define primitives '())
+;;__________________________________________________________________________;;
+;; Setup the Global Environment
+;;__________________________________________________________________________;;
 
-(define (setup-environment)
-  (let ((initial-env (extend-environment primitives the-empty-environment)))
-    ;; Self-Evaluating Values
-    (set-variable! 'True True initial-env)
-    (set-variable! 'False False initial-env)
-    (set-variable! 'the-empty-list '() initial-env)
-    (set-variable! 'Void Void initial-env)
-    (set-variable! '&args &args initial-env)
-    (set-variable! '>>> >>> initial-env)
-    ;; Primitive Procedures
-    (set-variable! 'null? (cons 'primitive null?) initial-env)
-    (set-variable! 'equal? (cons 'primitive equal?) initial-env)
-    (set-variable! 'print (cons 'primitive print) initial-env)
-    ;; Primitive List Procedures
-    (set-variable! 'cons (cons 'primitive cons) initial-env)
-    (set-variable! 'car (cons 'primitive car) initial-env)
-    (set-variable! 'cdr (cons 'primitive cdr) initial-env)
-    ;; Primitive Number Procedures
-    (set-variable! '+ (cons 'primitive +) initial-env)
-    (set-variable! '- (cons 'primitive -) initial-env)
-    (set-variable! '/ (cons 'primitive /) initial-env)
-    (set-variable! '* (cons 'primitive *) initial-env)
-    ;; Access to the type system
-    (set-variable! 'type (cons 'primitive type) initial-env)
-    (set-variable! 'type? (cons 'primitive type?) initial-env)
-    ;; Access to the unit-test framework
-    (set-variable! 'test (cons 'primitive test) initial-env)
-    initial-env))
+(define the-global-environment (extend-environment '() the-empty-environment))
 
-(define the-global-environment (setup-environment))
+;; set-self sets a self-evaluating symbol in the-global-environment
+(define (set-self sym func)
+  (set-variable! sym func the-global-environment))
+
+(set-self 'True True)
+(set-self 'False False)
+(set-self 'the-empty-list '())
+(set-self 'Void Void)
+(set-self '&args &args)
+(set-self '>>> >>>)
+
+;; set sets a primitive procedure in the-global-environment
+(define (set sym func)
+  (set-variable! sym (cons 'primitive func) the-global-environment))
+
+(define (->bool obj) (if object True False))
+
+;; Primitive Procedures
+;;_____________________________________________;;
+
+;; null?
+(define (meta-null? a) (->bool (null? a)))
+(set 'null? meta-null?)
+
+;; equal?
+(define (meta-equal? a b) (->bool (equal? a b)))
+(set 'equal? meta-equal?)
+
+;; print
+(define (meta-print . exps) (apply print exps) Void)
+(set 'print meta-print)
+
+
+;; Primitive List Procedures
+;;_____________________________________________;;
+
+(set 'cons cons)
+(set 'car car)
+(set 'cdr cdr)
+
+;; Primitive Number Procedures
+;;_____________________________________________;;
+
+(set '+ +)
+(set '- -)
+(set '/ /)
+(set '* *)
+
+;; Access to the type system
+;;_____________________________________________;;
+
+(set 'type type)
+(set 'type? type?)
+
 
 ;;__________________________________________________________________________;;
 ;; REPL
