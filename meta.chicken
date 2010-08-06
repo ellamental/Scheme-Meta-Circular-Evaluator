@@ -143,9 +143,14 @@
                     result-list))))                             ;; and cons it onto result-list
   (define args (cadr procedure))
   
-  (if (>= (length val-list) (length args))                      ;; Check for enough values
-      (loop args val-list '())
-    (Error (print "Too few values"))))
+  (cond ((= (length args) 0)                                    ;; Check for no argument procedures
+           (if (= (length val-list) 0)
+               '()
+               (Error (print "Too many values")))
+        ((>= (length val-list) (length args))                   ;; Check for enough values
+           (loop args val-list '()))
+        (else
+           (Error (print "Too few values")))))
 
 
 
@@ -231,3 +236,16 @@
 ;; Comment out (REPL) for debugging or using as a library
 (REPL)
 
+
+(define (a x)
+  (define (b y) y)
+  (b x))
+; (define ...) should return Void
+; (a 3) >>> 3
+; b >>> Error 'unbound-variable
+; 
+
+
+(define (b x)
+  (define (c) x)
+  (c))
