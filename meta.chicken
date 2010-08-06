@@ -132,36 +132,27 @@
                                                    (cadddr procedure))))))
     ))
 
-;; Allow use of &args for variable arity procedures
+
 (define (assign-values procedure val-list)
-  (define (loop arg-list val-list result-list)
-    (if (null? (cdr arg-list))                                  ;; Check for the end of argument list
-        (if (null? (cdr val-list))                              ;; Check if value list is null too
-            (reverse (cons (cons (car arg-list)
-                                 (car val-list))
-                           result-list))                        ;; If it is return result-list
-            (if (eq? (car arg-list) &args)                      ;; Check if last argument was &args
-                (reverse (cons (cons (car arg-list) val-list)
-                               result-list))                    ;; If it was return result-list
-                (Error (print "Too many values"))))
-        (loop (cdr arg-list)
-              (cdr val-list)                                    ;; If not at end of args
-              (cons (cons (car arg-list)                        ;; Create a pair of (arg . value)
-                          (car val-list))
-                    result-list))))                             ;; and cons it onto result-list
   (define args (cadr procedure))
-  
-  (cond ((null? args)                                           ;; Check for no argument procedures
-           (if (null? val-list)
-               '()
-               (Error (print "Too many values"))))
-        ((>= (length val-list) (length args))                   ;; Check for enough values
-           (loop args val-list '()))
-        (else
-           (Error (print "Too few values")))))
+  (define length-diff (- (length val-list) (length args)))
+  (define (car-pair x y) (cons (car x) (car y)))
+  (define (handle-&args args vals result)
+    (if (equal? (car args) &args)
+        (cons (cons (car args) vals) result)
+        (handle-&args (cdr args) (cdr vals) (cons (car-pair args vals) result)))) 
+  (cond ((member &args args)
+          (if (< length-diff -1) 
+              (Error (print "Too few variables"))
+              (handle-&args args val-list '())))
+        ((zero? length-diff)
+          (map cons args val-list))
+        ((negative? length-diff)
+          (Error (print "Too few variables")))
+        ((positive? length-diff)
+          (Error (print "Too many variables")))))
 
-
-
+          
 ;;__________________________________________________________________________;;
 ;; Primitive Syntax Definitions
 ;;__________________________________________________________________________;;
@@ -203,7 +194,7 @@
 (add-syntax 'begin (lambda (exp env) (eval-sequence (cdr exp) env)))
 
 ;; scheme
-;; Allows scheme expressions to be evaluated.  There are no hooks into/out of scheme.
+;; This shows how easy it is to add new syntax
 (add-syntax 'scheme (lambda (exp env) (eval (cadr exp))))
 
 ;;__________________________________________________________________________;;
@@ -227,7 +218,7 @@
 (define (set sym func)
   (set-variable! sym (cons 'primitive func) the-global-environment))
 
-(define (->bool obj) (if object True False))
+(define (->bool object) (if object True False))
 
 ;; Primitive Procedures
 ;;_____________________________________________;;
@@ -287,4 +278,19 @@
 ;; Comment out (REPL) for debugging or using as a library
 (REPL)
 
+
+(define (x count) (if (equal? count 0) (print count)
+                                       (begin
+                                         (print count)
+                                         (x (- count 1)))))
+
+(define (rev lst result) 
+  (if (null? lst) result 
+    (rev (cdr lst) (cons (car lst) result))))
+
+(define (rev lst)
+  (define (rev-loop lst result)
+    (if (null? lst) result 
+        (rev-loop (cdr lst) (cons (car lst) result))))
+  (rev-loop lst '()))
 
