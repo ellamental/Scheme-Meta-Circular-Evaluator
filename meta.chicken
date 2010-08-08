@@ -14,50 +14,16 @@
 ;; 
 ;;__________________________________________________________________________;;
 
-(define (Error #!rest args)
-  (cons 'error args))
-
-(define (error? object) (equal? (type object) 'error))
-
-(define current-exception-handler #f)
-
-;;__________________________________________________________________________;;
-;; Type System
-;; 
-;; Each object is a cons cell with the (car = type) (cdr = data).
-;; This is subject to change considerably.  Use the type operators 
-;; type, type?, object-data and make-type exclusivley to interact with types.
-;;__________________________________________________________________________;;
-
-
-(define (make-type type expression)
-  (cons type expression))
-
-(define (type object)
-  (cond ((symbol? object) 'symbol)
-        ((number? object) 'number)
-        ((string? object) 'string)
-        ((null? object)   '())
-        (else (car object))))
-
-(define (type? object . types)
-  (member (type object) types))
-
-(define (object-data object)
-  (cdr object))
-
 ;;__________________________________________________________________________;;
 ;; Booleans and Predicates
 ;;__________________________________________________________________________;;
 
-(define Void 'Void)
-(define &args '&args)
-(define >>> '>>>)
-
 (define True 'True)
 (define False 'False)
-(define (true? exp) (not (eq? exp False)))
-(define (false? exp) (eq? exp False))
+
+(define Void 'Void)          ;; Allows define and test to return nothing
+(define &args '&args)        ;; Support for variable arity procedures
+(define >>> '>>>)            ;; Support for (test exp >>> result)
 
 
 ;;__________________________________________________________________________;;
@@ -86,7 +52,7 @@
 
 (define (lookup-variable-value variable environment)
   (if (eq? environment the-empty-environment)
-    (Error 'unbound-variable "Unbound variable:  " variable)
+    (error 'unbound-variable "Unbound variable:  " variable)
     (if (hash-table-exists? (current-environment environment) variable)
         (hash-table-ref (current-environment environment) variable)
         (lookup-variable-value variable (enclosing-environment environment)))))
@@ -103,9 +69,10 @@
 ;; meta-eval uses global-syntax-definitions
 (define (meta-eval exp env)
   ;(print exp)
-  (cond ((type? exp 'number 'string) exp)
-        ((or (symbol? exp)
-             (type? exp 'symbol)) (lookup-variable-value exp env))               
+  (cond ((or (number? exp) (string? exp))
+          exp)
+        ((symbol? exp)
+             (lookup-variable-value exp env))               
         (else
           (let ((name (car exp)))
           (cond ((hash-table-exists? global-syntax-definitions name)
@@ -130,16 +97,13 @@
                                   (eval-sequence (cdr expressions) env))))
 
 (define (meta-apply procedure arguments) 
-  (cond ((type? procedure 'primitive)
+  (let ((type (car procedure)))
+  (cond ((eq? type 'primitive)
           (apply (cdr procedure) arguments))
-        ((type? procedure 'procedure)
-          (let ((arg-vals (assign-values procedure arguments)))
-            (cond ((type? arg-vals 'error) (meta-eval arg-vals (cadddr procedure)))   ;; break out of apply loop and return an error
-                  (else
-                    (eval-sequence (caddr procedure)
-                                   (extend-environment arg-vals
-                                                       (cadddr procedure)))))))
-    ))
+        ((eq? type 'procedure)
+          (eval-sequence (caddr procedure)
+                         (extend-environment (assign-values procedure arguments)
+                                             (cadddr procedure)))))))
 
 
 (define (assign-values procedure val-list)
@@ -155,14 +119,14 @@
   
   (cond ((member &args args)
           (if (< length-diff -1) 
-              (Error 'arity "Too few arguments")
+              (error 'arity "Too few arguments")
               (handle-&args args val-list '())))
         ((zero? length-diff)
           (map cons args val-list))
         ((negative? length-diff)
-          (Error 'arity "Too few arguments"))
+          (error 'arity "Too few arguments"))
         ((positive? length-diff)
-          (Error 'arity "Too many arguments"))))
+          (error 'arity "Too many arguments"))))
 
           
 ;;__________________________________________________________________________;;
@@ -192,7 +156,7 @@
 
 ;; if
 (define (eval-if exp env)
-  (if (true? (meta-eval (cadr exp) env))
+  (if (not (eq? False (meta-eval (cadr exp) env)))
       (meta-eval (caddr exp) env)
       (meta-eval (cadddr exp) env)))
 (add-syntax 'if eval-if)
@@ -224,13 +188,6 @@
   (test-loop (cdr exp)))
 (add-syntax 'test test)
 
-;; error
-(define (meta-error exp env)
-  ;(set! current-exception-handler (list (cadr exp) (cddr exp) env))
-  (apply print (cddr exp))
-  (REPL))
-(add-syntax 'error meta-error)
-
 ;; scheme
 ;; This shows how easy it is to add new syntax
 (add-syntax 'scheme (lambda (exp env) (eval (cadr exp))))
@@ -246,6 +203,17 @@
 (define (set-self sym func)
   (set-variable! sym func the-global-environment))
 
+;; set sets a primitive procedure in the-global-environment
+(define (set sym func)
+  (set-variable! sym (cons 'primitive func) the-global-environment))
+
+;; Return a meta boolean (True or False) in place of a Scheme one (#t or #f)
+(define (->bool object) (if object True False))
+
+
+;; Self-Evaluating Values
+;;_____________________________________________;;
+
 (set-self 'True True)
 (set-self 'False False)
 (set-self 'the-empty-list '())
@@ -253,11 +221,6 @@
 (set-self '&args &args)
 (set-self '>>> >>>)
 
-;; set sets a primitive procedure in the-global-environment
-(define (set sym func)
-  (set-variable! sym (cons 'primitive func) the-global-environment))
-
-(define (->bool object) (if object True False))
 
 ;; Primitive Procedures
 ;;_____________________________________________;;
@@ -293,6 +256,7 @@
 (set 'cons cons)
 (set 'car car)
 (set 'cdr cdr)
+(set 'vector vector)
 
 ;; Primitive Number Procedures
 ;;_____________________________________________;;
@@ -302,12 +266,6 @@
 (set '/ /)
 (set '* *)
 
-;; Access to the type system
-;;_____________________________________________;;
-
-(set 'type type)
-(set 'type? type?)
-
 
 ;;__________________________________________________________________________;;
 ;; REPL
@@ -316,14 +274,13 @@
 
 (define (REPL)
   (display ": ")
-  (let ((input (read)))
-    (let ((output (meta-eval input the-global-environment)))
-      (if (eq? output Void) (REPL)
-                            (user-print output))))
+  (define input (read))
+  (define output (condition-case (meta-eval input the-global-environment)
+                   ((exn) (begin (print "Error:") (REPL)))))
+  (if (eq? output Void) (REPL)
+                        (print output))
   (REPL))
 
-(define (user-print object)
-  (print object))
 
 
 ;; Comment out (REPL) for debugging or using as a library
