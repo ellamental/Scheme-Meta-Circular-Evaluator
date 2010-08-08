@@ -37,6 +37,7 @@
   (cond ((symbol? object) 'symbol)
         ((number? object) 'number)
         ((string? object) 'string)
+        ((null? object)   '())
         (else (car object))))
 
 (define (type? object . types)
@@ -103,7 +104,8 @@
 (define (meta-eval exp env)
   ;(print exp)
   (cond ((type? exp 'number 'string) exp)
-        ((type? exp 'symbol) (lookup-variable-value exp env))               
+        ((or (symbol? exp)
+             (type? exp 'symbol)) (lookup-variable-value exp env))               
         (else
           (let ((name (car exp)))
           (cond ((hash-table-exists? global-syntax-definitions name)
@@ -153,20 +155,14 @@
   
   (cond ((member &args args)
           (if (< length-diff -1) 
-              (Error 'arity "Too few arguments" #\newline
-                            "procedure-arguments:  " args #\newline
-                            "supplied-arguments:   " val-list)
+              (Error 'arity "Too few arguments")
               (handle-&args args val-list '())))
         ((zero? length-diff)
           (map cons args val-list))
         ((negative? length-diff)
-          (Error 'arity "Too few arguments" #\newline
-                        "procedure-arguments:  " args #\newline
-                        "supplied-arguments:   " val-list))
+          (Error 'arity "Too few arguments"))
         ((positive? length-diff)
-          (Error 'arity "Too many arguments" #\newline
-                        "procedure-arguments:  " args #\newline
-                        "supplied-arguments:   " val-list))))
+          (Error 'arity "Too many arguments"))))
 
           
 ;;__________________________________________________________________________;;
@@ -230,7 +226,7 @@
 
 ;; error
 (define (meta-error exp env)
-  (set! current-exception-handler (list (cadr exp) (cddr exp) env))
+  ;(set! current-exception-handler (list (cadr exp) (cddr exp) env))
   (apply print (cddr exp))
   (REPL))
 (add-syntax 'error meta-error)
@@ -265,21 +261,6 @@
 
 ;; Primitive Procedures
 ;;_____________________________________________;;
-
-;; current-error-handler
-;; Get the current exception and clear the handler
-(define (meta-current-exception)
-  (let ((x current-exception-handler))
-    (begin 
-      (set! current-exception-handler False)
-      (car x))))
-(set 'current-exception meta-current-exception)
-
-;; clear-current-exception
-(define (clear-current-exception)
-  (set! current-exception-handler False)
-  False)
-(set 'clear-current-exception clear-current-exception)
 
 ;; load
 (define (meta-load filename)
