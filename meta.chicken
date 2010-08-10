@@ -130,29 +130,27 @@
 
 
 ;;__________________________________________________________________________;;
-;; Primitive Syntax Definitions
-;;__________________________________________________________________________;;
-
-(define global-syntax-definitions (make-hash-table))
-
-(define (add-syntax name procedure) 
-  (hash-table-set! global-syntax-definitions name procedure))
-
-;; (scheme-syntax name (scheme-lambda (exp env) body))
-(add-syntax 'scheme-syntax 
-  (lambda (exp env) 
-    (add-syntax (cadr exp)              ;; name
-                (eval (caddr exp)))     ;; procedure
-    Void))
-
-
-;;__________________________________________________________________________;;
 ;; Setup the Global Environment
 ;;__________________________________________________________________________;;
 
+;; Global Syntax Definitions
+(define global-syntax-definitions (make-hash-table))
+
+(define (set-syntax! name exp)
+  (hash-table-set! global-syntax-definitions name exp))
+
+;; (scheme-syntax name (scheme-lambda (exp env) body))
+(hash-table-set! global-syntax-definitions 'scheme-syntax
+  (lambda (exp env)
+    (set-syntax! (cadr exp)                    ;; name
+                 (eval (caddr exp)))))         ;; procedure
+
+
+;; Global Variable Definitions
 (define the-global-environment (extend-environment '() the-empty-environment))
 
-;; load
+;; load (meta-load)
+;; This must be defined here to load primitives before the REPL
 (define (meta-load filename)
   (define f (open-input-file filename))
   (define (read-loop)
@@ -172,7 +170,7 @@
   (display ": ")
   (define input (read))
   (define output ;(condition-case 
-                   (meta-eval input the-global-environment)
+    (meta-eval input the-global-environment)
 ;;                    ((exn arity) (begin (print "Error: Arity") (REPL)))
 ;;                    ((exn unbound-variable) (begin (print "Unbound-variable") (REPL)))
 ;;                    ((exn) (begin (print "Error:") (REPL))))
@@ -182,10 +180,15 @@
   (REPL))
 
 
-
-;; Comment out (REPL) for debugging or using as a library
+;; Load primitive syntax definitions (quote define lambda if ...)
 (meta-load "~/Documents/meta/meta-syntax.chicken")
+
+;; Load primitive functions (True False equal? cons car cdr + - ...)
 (meta-load "~/Documents/meta/meta-primitives.chicken")
+
+;; Load the test suite to make sure everything still works
 (meta-load "~/Documents/meta/meta-test.chicken")
+
+;; Start the REPL.  Comment out for debugging or using as a library
 (REPL)
 

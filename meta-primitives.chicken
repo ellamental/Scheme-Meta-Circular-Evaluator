@@ -41,10 +41,16 @@
 ;; List Utilities
 ;;__________________________________________________________________________;;
 
+(define null? (call-scheme null?))
 (define cons (call-scheme cons))
 (define car (call-scheme car))
 (define cdr (call-scheme cdr))
-(define null? (call-scheme null?))
+
+(define first (call-scheme car))
+(define rest (call-scheme cdr))
+(define second (call-scheme cadr))
+(define third (call-scheme caddr))
+(define fourth (call-scheme cadddr))
 
 ;;__________________________________________________________________________;;
 ;; Math

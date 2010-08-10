@@ -1,4 +1,11 @@
+(scheme-syntax scheme 
+  (lambda (exp env) 
+    (eval (cadr exp))))
 
+(scheme-syntax call-scheme 
+  (lambda (exp env)
+    (cons 'primitive
+          (eval (cadr exp)))))
 
 (scheme-syntax quote
   (lambda (exp env) (cadr exp)))
@@ -49,13 +56,16 @@
     (test-loop (cdr exp))))
 
 
-
-(scheme-syntax scheme 
-  (lambda (exp env) 
-    (eval (cadr exp))))
-
-(scheme-syntax call-scheme 
+(scheme-syntax syntax
   (lambda (exp env)
-    (cons 'primitive
-          (eval (cadr exp)))))
+    (set-syntax! (cadr exp)
+                 (lambda (expr env)
+                   (meta-eval (list (caddr exp) exp env) env)))))
 
+
+(scheme-syntax code
+  (lambda (exp env)
+    (print (cadr exp) #\newline (caddr exp))
+    ))
+
+      
