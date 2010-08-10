@@ -1,0 +1,61 @@
+
+
+(scheme-syntax quote
+  (lambda (exp env) (cadr exp)))
+
+(scheme-syntax define
+  (lambda (exp env)
+    (define (eval-lambda-definition)
+      (let ((name (caadr exp))
+            (args (cdadr exp))
+            (body (cddr exp)))
+        (set-variable! name (list 'procedure args body env) env)))
+    (if (symbol? (cadr exp))
+      (set-variable! (cadr exp) (meta-eval (caddr exp) env) env)
+      (eval-lambda-definition))
+    Void))
+
+(scheme-syntax if
+  (lambda (exp env)
+    (if (meta-eval (cadr exp) env)
+        (meta-eval (caddr exp) env)
+        (meta-eval (cadddr exp) env))))
+
+(scheme-syntax lambda
+  (lambda (exp env)
+    (list 'procedure (cadr exp) (cddr exp) env)))
+
+
+(scheme-syntax begin
+  (lambda (exp env) (eval-sequence (cdr exp) env)))
+
+
+(scheme-syntax test
+  (lambda (exp env)
+    (define test-environment (extend-environment '() env))
+    (define (test-loop expr)
+      (if (null? expr) Void
+          (begin
+            (test-expr expr)
+            (test-loop (cdddr expr)))))
+    (define (test-expr expression)
+      (let ((test-val (meta-eval (car expression) test-environment))
+            (expected (meta-eval (caddr expression) test-environment)))
+        (if (equal? test-val expected)
+            #t
+            (print "#---------Error---------#" #\newline
+                   (car expression) #\newline
+                   "!= " (caddr expression)))))
+    (test-loop (cdr exp))))
+
+
+
+(scheme-syntax scheme 
+  (lambda (exp env) 
+    (eval (cadr exp))))
+
+(scheme-syntax call-scheme 
+  (lambda (exp env)
+    (cons 'primitive
+          (eval (cadr exp)))))
+

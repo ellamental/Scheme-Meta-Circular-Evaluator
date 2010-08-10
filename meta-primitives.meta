@@ -1,0 +1,68 @@
+;;__________________________________________________________________________;;
+;; Self-Evaluating Symbols
+;;__________________________________________________________________________;;
+
+(define True (scheme True))
+(define False (scheme False))
+(define the-empty-list '())
+(define Void 'Void)
+(define &args '&args)
+(define >>> '>>>)
+
+
+;;__________________________________________________________________________;;
+;; Utility Functions
+;;__________________________________________________________________________;;
+
+;; print
+(define (print &args)
+  ((call-scheme (lambda (x) (apply print x))) &args)
+  Void)
+
+;;__________________________________________________________________________;;
+;; Predicates
+;;__________________________________________________________________________;;
+
+(define equal? (call-scheme equal?))
+(test
+  (equal? 1 1)
+  >>> True
+  (equal? 1 0)
+  >>> False
+  (equal? #\a #\a)
+  >>> True
+  (equal? #\b #\g)
+  >>> False
+  (equal? '(1 2 3) '(1 2 3))
+  >>> True
+)
+
+;;__________________________________________________________________________;;
+;; List Utilities
+;;__________________________________________________________________________;;
+
+(define cons (call-scheme cons))
+(define car (call-scheme car))
+(define cdr (call-scheme cdr))
+(define null? (call-scheme null?))
+
+;;__________________________________________________________________________;;
+;; Math
+;;__________________________________________________________________________;;
+
+(define + (call-scheme +))
+(define - (call-scheme -))
+(define * (call-scheme *))
+(define / (call-scheme /))
+
+
+(define (speed n)
+  (define (factorial n)
+    (if (equal? n 0) 1
+        (* n (factorial (- n 1)))))
+  (define (loop n)
+    (if (equal? 0 n) 'Finished
+        (begin (factorial 50) (loop (- n 1)))))
+  (loop n))
+
+
