@@ -122,9 +122,28 @@
   >>> Void
   (rev '(1 2 3))
   >>> '(3 2 1)
+
+;;   ;; Closures
+;;   (define (make-counter n)
+;;     (lambda ()
+;;       (define n (+ n 1))
+;;       (- n 1)))
+;;   >>> Void
+;;   (define counter-1 (make-counter 100))
+;;   >>> Void
+;;   (define counter-2 (make-counter 50))
+;;   >>> Void
+;;   (counter-1)
+;;   >>> 100
+;;   (counter-2)
+;;   >>> 50
+;;   (counter-1)
+;;   >>> 101
+;;   (counter-2)
+;;   >>> 51
+;;   )
+
 )
-
-
 
 ;; if
 ;;__________________________________________________________________________;;
@@ -176,31 +195,33 @@
 ;; Very simple access to Chicken's eval
 ;;__________________________________________________________________________;;
 
-(test
-  (scheme (length '(1 2 3)))
-  >>> 3
-  (scheme (list-ref '(1 2 3) 1))
+(test 
+  ;; scheme calls a 100% pure scheme expression directly
+  (scheme (+ 1 1))
   >>> 2
+  (scheme (cons 1 (cons 2 '())))
+  >>> '(1 2)
+  
+  ;; call-scheme produces a new primitive from a scheme procedure
+  ((call-scheme +) 1 2)
+  >>> 3
+  ((call-scheme car) '(1 2 3))
+  >>> 1
+  
+  ;; scheme-define defines a Scheme primitive procedure using meta arguments.
+;;   (scheme-define (l x y) (list-ref x y))
+;;   >>> Void
+;;   (l '(45 5 3) 1)
+;;   >>> 5
+  
+  
 )
-
-;; Self-Evaluating Constants
-;;__________________________________________________________________________;;
-
-(test
-  True >>> 'True
-  False >>> 'False
-  Void >>> 'Void
-  the-empty-list >>> '()
-  >>> >>> '>>>
-  &args >>> '&args
-)
-
-
-
 
 ;; Make sure error reporting is working.
 ;; (+ 1 1) != 3 should be the only error reported.
 ;;__________________________________________________________________________;;
 
-(test "All Tests Successful!!!" >>> "")
+;(test "All Tests Successful!!!" >>> "")
+
+(print "All Tests Successful!!!")
 

@@ -18,8 +18,8 @@
 ;; Booleans and Predicates
 ;;__________________________________________________________________________;;
 
-(define True 'True)
-(define False 'False)
+(define True #t)
+(define False #f)
 
 (define Void 'Void)          ;; Allows define and test to return nothing
 (define &args '&args)        ;; Support for variable arity procedures
@@ -69,7 +69,7 @@
 ;; meta-eval uses global-syntax-definitions
 (define (meta-eval exp env)
   ;(print exp)
-  (cond ((or (number? exp) (string? exp))
+  (cond ((or (number? exp) (string? exp) (char? exp) (boolean? exp))
           exp)
         ((symbol? exp)
              (lookup-variable-value exp env))               
@@ -128,69 +128,22 @@
         ((positive? length-diff)
           (error 'arity "Too many arguments"))))
 
-          
+
 ;;__________________________________________________________________________;;
 ;; Primitive Syntax Definitions
 ;;__________________________________________________________________________;;
 
-
 (define global-syntax-definitions (make-hash-table))
+
 (define (add-syntax name procedure) 
   (hash-table-set! global-syntax-definitions name procedure))
 
-;; quote
-(add-syntax 'quote (lambda (exp env) (cadr exp)))
-
-;; define
-(define (eval-definition exp env)
-  (define (eval-lambda-definition)
-    (let ((name (caadr exp))
-          (args (cdadr exp))
-          (body (cddr exp)))
-      (set-variable! name (list 'procedure args body env) env)))
-  (if (symbol? (cadr exp))
-    (set-variable! (cadr exp) (meta-eval (caddr exp) env) env)
-    (eval-lambda-definition))
-  Void)
-(add-syntax 'define eval-definition)
-
-;; if
-(define (eval-if exp env)
-  (if (not (eq? False (meta-eval (cadr exp) env)))
-      (meta-eval (caddr exp) env)
-      (meta-eval (cadddr exp) env)))
-(add-syntax 'if eval-if)
-
-;; lambda
-(define (eval-lambda exp env)
-  (list 'procedure (cadr exp) (cddr exp) env))
-(add-syntax 'lambda eval-lambda)
-
-;; begin
-(add-syntax 'begin (lambda (exp env) (eval-sequence (cdr exp) env)))
-
-;; test
-(define (test exp env)
-  (define test-environment (extend-environment '() env))
-  (define (test-loop expr)
-    (if (null? expr) Void
-        (begin
-          (test-expr expr)
-          (test-loop (cdddr expr)))))
-  (define (test-expr expression)
-    (let ((test-val (meta-eval (car expression) test-environment))
-          (expected (meta-eval (caddr expression) test-environment)))
-      (if (equal? test-val expected)
-          True
-          (print "#---------Error---------#" #\newline
-                 (car expression) #\newline
-                 "!= " (caddr expression)))))
-  (test-loop (cdr exp)))
-(add-syntax 'test test)
-
-;; scheme
-;; This shows how easy it is to add new syntax
-(add-syntax 'scheme (lambda (exp env) (eval (cadr exp))))
+;; (scheme-syntax name (scheme-lambda (exp env) body))
+(add-syntax 'scheme-syntax 
+  (lambda (exp env) 
+    (add-syntax (cadr exp)              ;; name
+                (eval (caddr exp)))     ;; procedure
+    Void))
 
 
 ;;__________________________________________________________________________;;
@@ -198,32 +151,6 @@
 ;;__________________________________________________________________________;;
 
 (define the-global-environment (extend-environment '() the-empty-environment))
-
-;; set-self sets a self-evaluating symbol in the-global-environment
-(define (set-self sym func)
-  (set-variable! sym func the-global-environment))
-
-;; set sets a primitive procedure in the-global-environment
-(define (set sym func)
-  (set-variable! sym (cons 'primitive func) the-global-environment))
-
-;; Return a meta boolean (True or False) in place of a Scheme one (#t or #f)
-(define (->bool object) (if object True False))
-
-
-;; Self-Evaluating Values
-;;_____________________________________________;;
-
-(set-self 'True True)
-(set-self 'False False)
-(set-self 'the-empty-list '())
-(set-self 'Void Void)
-(set-self '&args &args)
-(set-self '>>> >>>)
-
-
-;; Primitive Procedures
-;;_____________________________________________;;
 
 ;; load
 (define (meta-load filename)
@@ -235,48 +162,21 @@
                              (meta-eval e the-global-environment)
                              (read-loop)))))
   (read-loop))
-(set 'load meta-load)
-
-;; null?
-(define (meta-null? a) (->bool (null? a)))
-(set 'null? meta-null?)
-
-;; equal?
-(define (meta-equal? a b) (->bool (equal? a b)))
-(set 'equal? meta-equal?)
-
-;; print
-(define (meta-print . exps) (apply print exps) Void)
-(set 'print meta-print)
-
-
-;; Primitive List Procedures
-;;_____________________________________________;;
-
-(set 'cons cons)
-(set 'car car)
-(set 'cdr cdr)
-(set 'vector vector)
-
-;; Primitive Number Procedures
-;;_____________________________________________;;
-
-(set '+ +)
-(set '- -)
-(set '/ /)
-(set '* *)
-
+(set-variable! 'load (cons 'primitive meta-load) the-global-environment)
 
 ;;__________________________________________________________________________;;
 ;; REPL
 ;;__________________________________________________________________________;;
 
-
 (define (REPL)
   (display ": ")
   (define input (read))
-  (define output (condition-case (meta-eval input the-global-environment)
-                   ((exn) (begin (print "Error:") (REPL)))))
+  (define output ;(condition-case 
+                   (meta-eval input the-global-environment)
+;;                    ((exn arity) (begin (print "Error: Arity") (REPL)))
+;;                    ((exn unbound-variable) (begin (print "Unbound-variable") (REPL)))
+;;                    ((exn) (begin (print "Error:") (REPL))))
+    )
   (if (eq? output Void) (REPL)
                         (print output))
   (REPL))
@@ -284,5 +184,8 @@
 
 
 ;; Comment out (REPL) for debugging or using as a library
+(meta-load "~/Documents/meta/meta-syntax.chicken")
+(meta-load "~/Documents/meta/meta-primitives.chicken")
+(meta-load "~/Documents/meta/meta-test.chicken")
 (REPL)
 
