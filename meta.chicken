@@ -1,4 +1,4 @@
-;;#!/usr/local/bin/csi
+#!/usr/local/bin/csi
 ;;__________________________________________________________________________;;
 ;; meta
 ;; meta.chicken | 2010-08-04
@@ -13,6 +13,8 @@
 ;; TODO:
 ;; 
 ;;__________________________________________________________________________;;
+
+(use srfi-69)
 
 ;;__________________________________________________________________________;;
 ;; Booleans and Predicates
@@ -181,13 +183,13 @@
 
 
 ;; Load primitive syntax definitions (quote define lambda if ...)
-(meta-load "~/Documents/meta/meta-syntax.chicken")
+(meta-load "meta-syntax.chicken")
 
 ;; Load primitive functions (True False equal? cons car cdr + - ...)
-(meta-load "~/Documents/meta/meta-primitives.chicken")
+(meta-load "meta-primitives.chicken")
 
 ;; Load the test suite to make sure everything still works
-(meta-load "~/Documents/meta/meta-test.chicken")
+(meta-load "meta-test.chicken")
 
 ;; Start the REPL.  Comment out for debugging or using as a library
 (REPL)
