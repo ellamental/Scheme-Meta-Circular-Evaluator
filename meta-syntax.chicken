@@ -55,17 +55,69 @@
                    "!= " (caddr expression)))))
     (test-loop (cdr exp))))
 
+(scheme-syntax eval
+  (lambda (exp env)
+    (meta-eval (cadr exp) env)))
+
+
 
 (scheme-syntax syntax
   (lambda (exp env)
     (set-syntax! (cadr exp)
-                 (lambda (expr env)
-                   (meta-eval (list (caddr exp) exp env) env)))))
+                 (lambda (expr envi) 
+                   (print (list (caddr exp) expr envi) envi))))) 
+  
+
+;; (scheme-syntax syntax
+;;   (lambda (binding-exp binding-env)
+;;     (define meta-binding-expr (caddr binding-exp))
+;;     (define evld (meta-eval (list meta-binding-expr exp
+;; (or 1 2)
+;; (syntax or 
+;;   (lambda (exp env)
+;;     (if (cadr exp) (cadr exp)
+;;                    (if (caddr exp) (caddr exp)
+;;                                    False))))
+
+;; (scheme-syntax syntax
+;;   (lambda (exp env)
+;;     (set-syntax! (cadr exp)
+;;                  (lambda (expr env)
+;;                    (meta-eval (list (caddr exp) exp env) env)))))
+
+;; (meta-eval (caddr exp) env)
+;; 
+;; (lambda (exp env)
+;;   (define meta-lambda 
+
+;;     
+;; (scheme-syntax meta-lambda
+;;   (lambda (exp env)
+;;     (meta-eval (list 'lambda (cadr exp) (caddr exp)) env)))
+;;     
+;;     
+;; (scheme-syntax call-meta-lambda
+;;   (lambda (exp env)
+;;     (print (list (cadr exp) (cdr exp)) env)))
+;; 
+;; 
+;; (scheme-syntax test
+;;   (define meta-lambda 
+;;   (call-scheme (lambda (exp env) (meta-eval (list (caddr exp) exp env) env))
+;; 
 
 
-(scheme-syntax code
-  (lambda (exp env)
-    (print (cadr exp) #\newline (caddr exp))
-    ))
+;; (and 1 2 3)
+;; (lambda (exp env) 
+
+
+;; (scheme-syntax code
+;;   (lambda (exp env)
+;;     (define name (cadr exp))
+;;     (define code (caddr exp))
+;;     (print name #\newline code)
+;;     (define procedure (meta-eval code env))
+;;     (print procedure)
+;;     ))
 
       

@@ -69,7 +69,7 @@
 ;; meta-eval uses global-syntax-definitions
 (define (meta-eval exp env)
   ;(print exp)
-  (cond ((or (number? exp) (string? exp) (char? exp) (boolean? exp))
+  (cond ((or (number? exp) (string? exp) (char? exp) (boolean? exp) (hash-table? exp))
           exp)
         ((symbol? exp)
              (lookup-variable-value exp env))               
@@ -192,3 +192,5 @@
 ;; Start the REPL.  Comment out for debugging or using as a library
 (REPL)
 
+
+  
